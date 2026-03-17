@@ -1,3 +1,10 @@
-logs/*.md
-state/*.md
+# Session data
+logs/
+state/
+
+# Character and scenario data (user-created content)
+characters/*.yaml
+scenarios/*.yaml
+
+# OS
 .DS_Store
