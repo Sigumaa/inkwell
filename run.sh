@@ -51,6 +51,12 @@ build_session_prompt() {
   if [ -f "state/$key/summary.md" ]; then
     prompt+=$'\n\n'"$(cat prompts/continue-header.md)"
     prompt+=$'\n\n## Previous Session Summary\n'"$(cat "state/$key/summary.md")"
+  elif ls "logs/$key"/*.md &>/dev/null; then
+    # summaryがないがログがある場合、最新ログの末尾を渡す
+    prompt+=$'\n\n'"$(cat prompts/continue-header.md)"
+    latest_log="$(ls -t "logs/$key"/*.md | head -1)"
+    prompt+=$'\n\n## Previous Session Log (last 100 lines)\n```\n'"$(tail -100 "$latest_log")"$'\n```\n'
+    prompt+=$'\nNote: 前回のsummaryが保存されていません。上記ログから物語の状況を把握して再開してください。\n'
   fi
 
   prompt+="$(inject_session_info "$key")"
@@ -85,13 +91,14 @@ case "${1:-}" in
       echo "Usage: ./run.sh continue <key> [play|auto]"
       echo ""
       echo "Available sessions:"
-      for d in state/*/; do
-        [ -d "$d" ] || continue
-        k="$(basename "$d")"
-        if [ -f "$d/summary.md" ]; then
-          echo "  $k"
-        fi
-      done
+      # state/ と logs/ の両方からキーを探す
+      for dir in state logs; do
+        [ -d "$dir" ] || continue
+        for d in "$dir"/*/; do
+          [ -d "$d" ] || continue
+          echo "  $(basename "$d")"
+        done
+      done | sort -u
       exit 1
     fi
     key="$2"
@@ -100,21 +107,30 @@ case "${1:-}" in
       echo "Error: Mode must be 'play' or 'auto'. Got: $mode"
       exit 1
     fi
-    if [ ! -f "state/$key/summary.md" ]; then
-      echo "Error: state/$key/summary.md not found. No session with key '$key'."
+    # セッションの存在確認（state or logs どちらかにあればOK）
+    if [ ! -d "state/$key" ] && [ ! -d "logs/$key" ]; then
+      echo "Error: No session found with key '$key'."
       exit 1
     fi
     check_created
-    mkdir -p "logs/$key"
+    mkdir -p "logs/$key" "state/$key"
     echo "Continuing session '$key' in $mode mode"
     prompt="$(build_session_prompt "$mode" "$key")"
     claude --system-prompt "$prompt" --name "rpg-$mode-$key"
     ;;
   list)
     found=0
-    for d in state/*/; do
-      [ -d "$d" ] || continue
-      k="$(basename "$d")"
+    # state/ と logs/ の両方からキーを収集
+    keys=""
+    for dir in state logs; do
+      [ -d "$dir" ] || continue
+      for d in "$dir"/*/; do
+        [ -d "$d" ] || continue
+        keys+="$(basename "$d")"$'\n'
+      done
+    done
+    keys="$(echo "$keys" | sort -u | grep -v '^$')"
+    for k in $keys; do
       if [ $found -eq 0 ]; then
         echo "Sessions:"
         echo ""
@@ -125,13 +141,12 @@ case "${1:-}" in
       if [ -d "logs/$k" ]; then
         log_count=$(find "logs/$k" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
       fi
-      if [ -f "$d/summary.md" ]; then
-        # summaryの1行目を取得
-        summary_line=$(head -1 "$d/summary.md" | sed 's/^#* *//')
+      if [ -f "state/$k/summary.md" ]; then
+        summary_line=$(head -1 "state/$k/summary.md" | sed 's/^#* *//')
         echo "  [$k]  logs: ${log_count}  ✓ resumable"
         [ -n "$summary_line" ] && echo "    $summary_line"
       else
-        echo "  [$k]  logs: ${log_count}  (in progress)"
+        echo "  [$k]  logs: ${log_count}  (no summary, can still continue)"
       fi
       echo ""
     done
