@@ -77,7 +77,7 @@ case "${1:-}" in
     # claude --resume でセッション選択画面を開く（全会話履歴を保持したまま再開）
     search="${2:-rpg}"
     echo "Resuming session (search: $search)..."
-    claude --resume "$search"
+    claude --resume "$search" --append-system-prompt "$(cat prompts/style.md)"
     ;;
   list)
     found=0
