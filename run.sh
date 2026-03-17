@@ -111,16 +111,33 @@ case "${1:-}" in
     claude --system-prompt "$prompt" --name "rpg-$mode-$key"
     ;;
   list)
-    echo "Sessions:"
+    found=0
     for d in state/*/; do
       [ -d "$d" ] || continue
       k="$(basename "$d")"
-      if [ -f "$d/summary.md" ]; then
-        echo "  $k  (has summary)"
-      else
-        echo "  $k  (in progress)"
+      if [ $found -eq 0 ]; then
+        echo "Sessions:"
+        echo ""
+        found=1
       fi
+      # ログファイル数
+      log_count=0
+      if [ -d "logs/$k" ]; then
+        log_count=$(find "logs/$k" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+      fi
+      if [ -f "$d/summary.md" ]; then
+        # summaryの1行目を取得
+        summary_line=$(head -1 "$d/summary.md" | sed 's/^#* *//')
+        echo "  [$k]  logs: ${log_count}  ✓ resumable"
+        [ -n "$summary_line" ] && echo "    $summary_line"
+      else
+        echo "  [$k]  logs: ${log_count}  (in progress)"
+      fi
+      echo ""
     done
+    if [ $found -eq 0 ]; then
+      echo "No sessions found. Run './run.sh play' or './run.sh auto' to start."
+    fi
     ;;
   *)
     echo "Usage: ./run.sh {create|play|auto|continue|list}"
