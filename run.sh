@@ -53,11 +53,34 @@ case "${1:-}" in
     prompt+="$(inject_project_dir)"
     claude --system-prompt "$prompt" --name "rpg-continue"
     ;;
+  auto)
+    if [ ! -f characters/player.yaml ]; then
+      echo "Error: characters/player.yaml not found. Run './run.sh create' first."
+      exit 1
+    fi
+    if [ ! -f scenarios/current.yaml ]; then
+      echo "Error: scenarios/current.yaml not found. Run './run.sh create' first."
+      exit 1
+    fi
+    prompt="$(cat prompts/auto.md)"
+    prompt+=$'\n\n## Characters\n'
+    for f in characters/*.yaml; do
+      [ "$(basename "$f")" = ".gitkeep" ] && continue
+      prompt+=$'\n### '"$(basename "$f" .yaml)"$'\n```yaml\n'"$(cat "$f")"$'\n```\n'
+    done
+    prompt+=$'\n\n## Scenario\n```yaml\n'"$(cat scenarios/current.yaml)"$'\n```\n'
+    if [ -f state/summary.md ]; then
+      prompt+=$'\n\n## Previous Session Summary\n'"$(cat state/summary.md)"
+    fi
+    prompt+="$(inject_project_dir)"
+    claude --system-prompt "$prompt" --name "rpg-auto"
+    ;;
   *)
-    echo "Usage: ./run.sh {create|play|continue}"
+    echo "Usage: ./run.sh {create|play|auto|continue}"
     echo ""
     echo "  create    - Create characters and scenario interactively"
-    echo "  play      - Start a new play session"
+    echo "  play      - Start a play session (player inputs actions)"
+    echo "  auto      - Start a semi-auto session (story flows, player confirms)"
     echo "  continue  - Continue from previous session"
     exit 1
     ;;
